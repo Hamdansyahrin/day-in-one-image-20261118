@@ -25,6 +25,7 @@ if (info.size === 0 || info.size > MAX_BYTES) {
   fail(`image size ${info.size} is outside the allowed range`);
 }
 
+// Sniff the format from the leading bytes rather than trusting the name.
 const header = readFileSync(sourcePath).subarray(0, 4);
 const isPng =
   header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47;
@@ -32,7 +33,14 @@ const isJpeg = header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
 if (!isPng && !isJpeg) {
   fail("source file is neither PNG nor JPEG by magic bytes");
 }
+const formatName = isPng ? "PNG" : "JPEG";
 
 mkdirSync(outDir, { recursive: true });
 copyFileSync(sourcePath, destPath);
-console.log(`wrote ${destPath} (${info.size} bytes)`);
+
+// Read the copy back: a short write must never pass as a finished entry.
+const written = statSync(destPath);
+if (written.size !== info.size) {
+  fail(`copy mismatch: wrote ${written.size} of ${info.size} bytes`);
+}
+console.log(`wrote ${destPath} (${written.size} bytes, ${formatName})`);
