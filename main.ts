@@ -1,11 +1,38 @@
-// A working news-image-daily entry (Node 22, standard library only): its image is the entry.png beside this file, and
-// the program copies it to /output/entry.png. A starting point, not a winner: replace the image. The gate takes a
-// whole PNG or JPEG of at most 1 MiB and 1024 by 1024 pixels, and the judge sees exactly the bytes copied.
-//
-// Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+// day-in-one-image: copies the bundled front-page image to the output folder.
+// The picture itself is frozen at build time; this program only validates
+// and delivers it, so repeated runs always produce the same bytes.
 
-import { copyFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { copyFileSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-copyFileSync(new URL('./entry.png', import.meta.url), join(process.env.MAKEFUN_OUTPUT_DIR ?? '/output', 'entry.png'));
+const MAX_BYTES = 1024 * 1024;
+const here = dirname(fileURLToPath(import.meta.url));
+const sourcePath = join(here, "entry.png");
+const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
+const destPath = join(outDir, "entry.png");
+
+function fail(message: string): never {
+  console.error(`entry delivery failed: ${message}`);
+  process.exit(1);
+}
+
+const info = statSync(sourcePath, { throwIfNoEntry: false });
+if (!info || !info.isFile()) {
+  fail(`missing source image at ${sourcePath}`);
+}
+if (info.size === 0 || info.size > MAX_BYTES) {
+  fail(`image size ${info.size} is outside the allowed range`);
+}
+
+const header = readFileSync(sourcePath).subarray(0, 4);
+const isPng =
+  header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47;
+const isJpeg = header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+if (!isPng && !isJpeg) {
+  fail("source file is neither PNG nor JPEG by magic bytes");
+}
+
+mkdirSync(outDir, { recursive: true });
+copyFileSync(sourcePath, destPath);
+console.log(`wrote ${destPath} (${info.size} bytes)`);
